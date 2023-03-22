@@ -68,23 +68,6 @@ def skip_component(m, config):
     if config.blacklist_virtual and m.attr == 'Virtual':
         return True
 
-    # skip components with dnp field not empty
-    # if config.dnp_field \
-    #         and config.dnp_field in m.extra_fields \
-    #         and m.extra_fields[config.dnp_field]:
-    #     return True
-
-    # skip components with wrong variant field
-    # if config.board_variant_field and config.board_variant_whitelist:
-    #     ref_variant = m.extra_fields.get(config.board_variant_field, '')
-    #     if ref_variant not in config.board_variant_whitelist:
-    #         return True
-
-    # if config.board_variant_field and config.board_variant_blacklist:
-    #     ref_variant = m.extra_fields.get(config.board_variant_field, '')
-    #     if ref_variant and ref_variant in config.board_variant_blacklist:
-    #         return True
-
     return False
 
 # -----------------------------------------------------------------------------
@@ -113,6 +96,7 @@ def generate_stencil(pcb_footprints, config):
 
         return sorted(l, key=lambda r: (alphanum_key(r[0]), r[1]))
 
+
     # build grouped part list
     skipped_components = []
     part_groups = {}
@@ -125,9 +109,6 @@ def generate_stencil(pcb_footprints, config):
         norm_value, unit = units.componentValue(f.val)
 
         extras = []
-        # if config.extra_fields:
-        #     extras = [f.extra_fields.get(ef, '')
-        #               for ef in config.extra_fields]
 
         group_key = (norm_value, unit, tuple(extras), f.footprint, f.attr)
         valrefs = part_groups.setdefault(group_key, [f.val, []])
@@ -151,10 +132,6 @@ def generate_stencil(pcb_footprints, config):
             ref_ord = config.component_sort_order.index('~')
         return ref_ord, e, fp, -qty, alphanum_key(rf[0][0])
 
-    # if '~' not in config.component_sort_order:
-    #     config.component_sort_order.append('~')
-    # bom_table = sorted(bom_table, key=sort_func)
-
     result = {
         'both': bom_table,
         'skipped': skipped_components
@@ -169,7 +146,6 @@ def generate_stencil(pcb_footprints, config):
                 filtered_table.append((len(filtered_refs), row[1],
                                        row[2], filtered_refs, row[4]))
 
-        # result[layer] = sorted(filtered_table, key=sort_func)
         result[layer] = filtered_table
 
     return result
@@ -238,37 +214,68 @@ def searchNearestNextEdge( sortEdges, px, py ):
   return nextEdge, reverse, dist
 
 
-def gcode_border( pcbdata, config, pcb_side ):
-  gcode = ''
-  intensity = str( config.laser_border_intensity )
-  speed     = " F" + str( config.laser_border_speed )
+def arc_edges(center_x, center_y, radius, start_angle, end_angle):
+    edges = []
 
-  minx = pcbdata["edges_bbox"]["minx"] 
+    delta_angle = 1
+    start_x = center_x + radius * math.cos(math.radians(start_angle))
+    start_y = center_y + radius * math.sin(math.radians(start_angle))
+    end_x = center_x + radius * math.cos(math.radians(end_angle))
+    end_y = center_y + radius * math.sin(math.radians(end_angle))
+
+    while (start_angle + delta_angle) < end_angle:
+        mid_x = center_x + radius * math.cos(math.radians(start_angle + delta_angle))
+        mid_y = center_y + radius * math.sin(math.radians(start_angle + delta_angle))
+
+        edges.append({ "startx": start_x, "starty": start_y, "endx": mid_x, "endy": mid_y})
+
+        start_x = mid_x
+        start_y = mid_y
+        start_angle += delta_angle
+
+    if start_angle != end_angle:
+        edges.append({ "startx": start_x, "starty": start_y, "endx": end_x, "endy": end_y})
+
+    return edges
+
+
+def gcode_border(pcbdata, config, pcb_side, simulation):
+  gcode = ''
+  intensity = " S" + str( config.laser_border_intensity * 10 )  # GRBL expects intensity in tenths perсents
+  speed     = " F" + str( config.laser_border_speed )
+  if simulation:
+      move_command = 'G00'
+  else:
+      move_command = 'G01'
+
+  minx = pcbdata["edges_bbox"]["minx"]
   miny = pcbdata["edges_bbox"]["miny"]
-  maxx = pcbdata["edges_bbox"]["maxx"] 
+  maxx = pcbdata["edges_bbox"]["maxx"]
   maxy = pcbdata["edges_bbox"]["maxy"]
   def cX( x ):
     if pcb_side is "F":
       return str( round_floats( x - minx, 3 ) )
     else:
       return str( round_floats( maxx - x, 3 ) )
-    
+
   def cY( y ):
     if pcb_side is "F":
       return str( round_floats( y - miny, 3 ) )
-    else: 
+    else:
       return str( round_floats( maxy - y, 3 ) )
 
   # prepare optimization of laser path
   sortEdges = []
   for edge in pcbdata["edges"]:
-    if  edge["type"] is "segment":
-      newEdge = { "startx": edge["start"][0], "starty": edge["start"][1], "endx": edge["end"][0], "endy": edge["end"][1] }
+    if  edge["type"] == "segment":
+      newEdge = { "startx": edge["start"][0], "starty": edge["start"][1],
+                  "endx": edge["end"][0], "endy": edge["end"][1] }
       sortEdges.append( newEdge )
-    #if  edge["start"]["type"] == "segment":
-    #  gcode += "(" + repr (edge ) + ")\n"
-    #if  edge["start"]["type"] == "segment":
-    #  gcode += "(" + repr (edge ) + ")\n"
+    elif edge["type"] == "arc":
+        sortEdges.extend(arc_edges(edge["start"][0], edge["start"][1], edge["radius"],
+                          edge["startangle"], edge["endangle"]))
+    elif  edge["type"] == "circle":
+        sortEdges.extend(arc_edges(edge["start"][0], edge["start"][1], edge["radius"], 0, 360))
 
   nextEdge = 0
   reverse = False
@@ -280,80 +287,23 @@ def gcode_border( pcbdata, config, pcb_side ):
     gcode += '( n='+str(nextEdge)+ ' d='+str(d)+' )\n'
     if reverse :
       gcode += 'G00 X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   + '\n'
-      gcode += 'M03 S'+intensity +'\n'
-      gcode += 'G01 X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + speed +'\n'
-      gcode += 'M05 S0\n\n'
+      if not simulation:
+          gcode += 'M03'+ intensity +'\n'
+      gcode += move_command + ' X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + speed +'\n'
+      if not simulation:
+          gcode += 'M05 S0\n\n'
       px = edge["startx"]
       py = edge["starty"]
     else:
-      gcode += 'G00 X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + '\n'
-      gcode += 'M03 S'+intensity +'\n'
-      gcode += 'G01 X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   + speed +'\n'
-      gcode += 'M05 S0\n\n'
-      px = edge["endx"]
-      py = edge["endy"]
-      
-  # for edge in pcbdata["edges"]:
-  #   eStart = edge["start"]
-  #   gcode += 'G00 X'+cX(eStart[0])+ ' Y'+cY(eStart[1]) +'\n'
-  #   eEnd = edge["end"]
-  #   gcode += 'M03 S'+laser_intensity +'\n'
-  #   gcode += 'G01 X'+cX(eEnd[0])+ ' Y'+cY(eEnd[1]) +' F100\n'
-  #   gcode += 'M05 S0\n\n'
-  return gcode
-
-
-def gcode_border_sim( pcbdata, pcb_side ):
-  gcode = ''
-  minx = pcbdata["edges_bbox"]["minx"] 
-  miny = pcbdata["edges_bbox"]["miny"]
-  maxx = pcbdata["edges_bbox"]["maxx"] 
-  maxy = pcbdata["edges_bbox"]["maxy"]
-  def cX( x ):
-    return str( round_floats( maxx - x, 3 ) )
-    
-  def cY( y ):
-    if pcb_side is "F":
-      return str( round_floats( y - miny, 3 ) )
-    else: 
-      return str( round_floats( maxy - y, 3 ) )
-
-  # prepare optimization of laser path
-  sortEdges = []
-  for edge in pcbdata["edges"]:
-    if edge["type"] is "segment":
-      newEdge = { "startx": edge["start"][0], "starty": edge["start"][1], "endx": edge["end"][0], "endy": edge["end"][1] }
-      sortEdges.append( newEdge )
-    #if  edge["start"]["type"] == "arc":
-    # TODO
-    #if  edge["start"]["type"] == "circle":
-    # TODO
-
-  nextEdge = 0
-  reverse = False
-  px = 0
-  py = 0
-  while len( sortEdges ) > 0:
-    nextEdge, reverse, d = searchNearestNextEdge( sortEdges, px, py )
-    edge = sortEdges.pop( nextEdge )
-    
-    if reverse :
-      gcode += 'G00 X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   +'\n'
-      gcode += 'G00 X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) +'\n'
-      px = edge["startx"]
-      py = edge["starty"]
-    else:
-      gcode += 'G00 X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) +'\n'
-      gcode += 'G00 X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   +'\n'
+      gcode += 'G00 X'+ cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + '\n'
+      if not simulation:
+          gcode += 'M03'+ intensity +'\n'
+      gcode += move_command + ' X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   + speed +'\n'
+      if not simulation:
+          gcode += 'M05 S0\n\n'
       px = edge["endx"]
       py = edge["endy"]
 
-   
-  # for edge in pcbdata["edges"]:
-  #   eStart = edge["start"]
-  #   gcode += 'G00 X'+cX(eStart[0])+ ' Y'+cY(eStart[1]) +'\n'
-  #   eEnd = edge["end"]
-  #   gcode += 'G00 X'+cX(eEnd[0])+ ' Y'+cY(eEnd[1]) +'\n'
   return gcode
 
 # -----------------------------------------------------------------------------
@@ -361,41 +311,39 @@ def gcode_border_sim( pcbdata, pcb_side ):
 def gcode_pads( pcbdata, config, pcb_side ):
   gcode = ''
   passes    = config.laser_pad_passes
-  intensity = str( config.laser_pad_intensity )
+  intensity = " S" + str( config.laser_pad_intensity * 10 ) # GRBL expects intensity in tenths perсents
   x_w =  float( config.laser_x_width ) / 2
   y_w =  float( config.laser_y_width ) / 2
   speed = " F" + str( config.laser_speed )
-  minx = pcbdata["edges_bbox"]["minx"] 
+  minx = pcbdata["edges_bbox"]["minx"]
   miny = pcbdata["edges_bbox"]["miny"]
-  maxx = pcbdata["edges_bbox"]["maxx"]  
+  maxx = pcbdata["edges_bbox"]["maxx"]
   maxy = pcbdata["edges_bbox"]["maxy"]
 
   def cX( x0, dx, dy, a ):
-    x = math.cos( a ) * dx - math.sin( a ) * dy 
-    # gcode += '('+str(x)
+    x = math.cos( a ) * dx - math.sin( a ) * dy
     if x < 0:
-      x += x_w 
+      x += x_w
     else:
-      x -= x_w 
-    x += x0 
-    # gcode += ' '+str(x)+')'
+      x -= x_w
+    x += x0
     if pcb_side is "F":
       return str( round_floats( x - minx, 3 ) )
     else:
       return str( round_floats( maxx - x, 3 ) )
-    
+
   def cY( y0, dx, dy, a ):
-    y = math.sin( a ) * dx + math.cos( a ) * dy 
+    y = math.sin( a ) * dx + math.cos( a ) * dy
     if y < 0:
-      y += y_w 
+      y += y_w
     else:
-      y -= y_w 
+      y -= y_w
     y += y0
     if pcb_side is "F":
       return str( round_floats( y - miny, 3 ) )
-    else: 
+    else:
       return str( round_floats( maxy - y, 3 ) )
-  
+
   def gCd( pad ):
     px = pad["px"]
     py = pad["py"]
@@ -403,12 +351,12 @@ def gcode_pads( pcbdata, config, pcb_side ):
     sy = pad["sy"]
     a  = pad["angle"]
     gcode = 'G00 X'+cX( px, -sx,  sy, a )+ ' Y'+cY( py, -sx,  sy, a ) +'\n'
-    gcode += 'M03 S'+intensity +'\n'
+    gcode += 'M03'+ intensity + '\n'
     for passCnt in range(passes):
-      gcode += 'G01 X'+cX( px, -sx,  sy, a )+ ' Y'+cY( py, -sx,  sy, a ) + speed+'\n'
-      gcode += 'G01 X'+cX( px,  sx,  sy, a )+ ' Y'+cY( py,  sx,  sy, a ) +'\n'
+      gcode += 'G01 X'+cX( px,  sx,  sy, a )+ ' Y'+cY( py,  sx,  sy, a ) + speed + '\n'
       gcode += 'G01 X'+cX( px,  sx, -sy, a )+ ' Y'+cY( py,  sx, -sy, a ) +'\n'
       gcode += 'G01 X'+cX( px, -sx, -sy, a )+ ' Y'+cY( py, -sx, -sy, a ) +'\n'
+      gcode += 'G01 X'+cX( px, -sx,  sy, a )+ ' Y'+cY( py, -sx,  sy, a ) +'\n'
     gcode += 'M05 S0\n'
     return gcode
 
@@ -416,18 +364,17 @@ def gcode_pads( pcbdata, config, pcb_side ):
   for footprint in pcbdata["footprints"]:
     if footprint["layer"] is pcb_side:
       if footprint["ref"] in config.component_blacklist:
-        gcode += "( BLACKLIST FOOTPRINT: "+ footprint["ref"] + " skipped )\n"         
+        gcode += "( BLACKLIST FOOTPRINT: "+ footprint["ref"] + " skipped )\n"
       else:
         fpPads = []
         x = 0
         y = 0
         for pad in footprint["pads"]:
           if pad["type"] is "smd":
-            if pad["shape"] is "roundrect" or pad["shape"] is "rect" :
-              # gcode += "(" + repr (pad ) + ")\n"
-              newPad = { 'ref': footprint["ref"], 
-                'px': pad["pos"][0], 'py': pad["pos"][1], 
-                'sx': pad["size"][0] / 2, 'sy': pad["size"][1] / 2, 
+            if pad["shape"] in ["roundrect", "rect", "oval"] :
+              newPad = { 'ref': footprint["ref"],
+                'px': pad["pos"][0], 'py': pad["pos"][1],
+                'sx': pad["size"][0] / 2, 'sy': pad["size"][1] / 2,
                 'angle': math.radians( pad["angle"] ) }
               x =  pad["pos"][0]
               y =  pad["pos"][1]
@@ -436,7 +383,7 @@ def gcode_pads( pcbdata, config, pcb_side ):
               gcode += "  ( "+footprint["ref"] +" / ignored shape: " + pad["shape"] + ")\n"
           else:
             gcode += "  ( "+footprint["ref"] +" / ignored type: " + pad["type"] + ")\n"
-       
+
         if len( fpPads ) > 0:
           newFP = { 'ref': footprint["ref"], 'px': x, 'py': y, 'pads': fpPads }
           sortFps.append( newFP )
@@ -449,7 +396,7 @@ def gcode_pads( pcbdata, config, pcb_side ):
     gcode += "\n( "+fp["ref"] +"  " + str(px) +" / "+ str(py) + ")\n"
 
     for padNo in range(0, len(fp["pads"]) ):
-      if padNo % 2 == 0: # even 
+      if padNo % 2 == 0: # even
         gcode += "( "+fp["ref"] +" pad #" + str(padNo) + ")\n"
         gcode += gCd( fp["pads"][padNo] )
     for padNo in range(0, len(fp["pads"]) ):
@@ -468,8 +415,6 @@ def gcode_pads( pcbdata, config, pcb_side ):
           nextFP = i
           minD = dist2
         i += 1
-      #   gcode += "( "+str(i) +"  d "+str(dist2)+ " "+ aFP["ref"] +" )\n"
-      # gcode += "(==> d "+str(minD)+ " "+str(nextFP)+" )\n"
 
   return gcode
 
@@ -494,14 +439,14 @@ def generate_file(pcb_file_dir, pcb_file_name, pcbdata, config, pcb_side):
         os.makedirs(gcode_file_dir)
 
     log.info("Wrting GCode")
-    # config_js = "var config = " + config.get_html_config()
 
     gcode = get_file_content("stencil.gcode")
-    gcode = gcode.replace('(**BORDER**)', gcode_border( pcbdata, config, pcb_side ) )
+    if config.include_edge_cuts:
+        gcode = gcode.replace('(**BORDER**)', gcode_border( pcbdata, config, pcb_side, False ) )
+    else:
+        gcode = gcode.replace('(**BORDER**)', '' )
     gcode = gcode.replace('(**PADS**)',   gcode_pads( pcbdata, config, pcb_side ) )
 
-    # gcode = gcode.replace('(**BORDER**)', repr( pcbdata ) )
-    
     with io.open(gcode_file_name, 'wt', encoding='utf-8') as gcode_file:
         gcode_file.write(gcode)
 
@@ -510,7 +455,7 @@ def generate_file(pcb_file_dir, pcb_file_name, pcbdata, config, pcb_side):
 
 # -----------------------------------------------------------------------------
 
-def generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, pcb_side):
+def generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, test):
     def get_file_content(file_name):
         path = os.path.join(os.path.dirname(__file__), "..", "gcode", file_name)
         if not os.path.exists(path):
@@ -518,23 +463,27 @@ def generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, pcb_side):
         with io.open(path, 'r', encoding='utf-8') as f:
             return f.read()
 
+    suffix = 'Frame'
+    if test:
+        suffix += '-TEST'
+
     if os.path.isabs(config.gcode_dest_dir):
         gcode_file_dir = config.gcode_dest_dir
     else:
         gcode_file_dir = os.path.join(pcb_file_dir, config.gcode_dest_dir)
-    gcode_file_name = process_substitutions( config.gcode_name_format, pcb_file_name, pcbdata['metadata'], pcb_side+'_Edge' )
+    gcode_file_name = process_substitutions(config.gcode_name_format, pcb_file_name,
+                                            pcbdata['metadata'], suffix)
     gcode_file_name = os.path.join(gcode_file_dir, gcode_file_name)
     gcode_file_dir = os.path.dirname(gcode_file_name)
     if not os.path.isdir(gcode_file_dir):
         os.makedirs(gcode_file_dir)
 
     log.info("Wrting GCode")
-    # config_js = "var config = " + config.get_gcode_config()
 
     gcode = get_file_content("stencil.gcode")
     gcode = gcode.replace('(**PADS**)', '' )
-    gcode = gcode.replace('(**BORDER**)', gcode_border_sim( pcbdata, pcb_side ) )
-    
+    gcode = gcode.replace('(**BORDER**)', gcode_border(pcbdata, config, 'F', test) )
+
     with io.open(gcode_file_name, 'wt', encoding='utf-8') as gcode_file:
         gcode_file.write(gcode)
 
@@ -560,19 +509,14 @@ def main(parser, config, logger):
     # build BOM
     gcode_file = generate_file(pcb_file_dir, pcb_file_name, pcbdata, config, "F")
 
-    # if config.open_browser:
-    #     logger.info("Opening file in browser")
-    #     open_file(gcode_file)
-
     # build BOM
     gcode_file = generate_file(pcb_file_dir, pcb_file_name, pcbdata, config, "B")
 
-    # if config.open_browser:
-    #     logger.info("Opening file in browser")
-    #     open_file(gcode_file)
+    # EDGE
+    gcode_file = generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, False)
 
-    gcode_file = generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, "F")
-    gcode_file = generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, "B")
+    # EDGE Test
+    gcode_file = generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, True)
 
 
 # -----------------------------------------------------------------------------
@@ -592,10 +536,6 @@ def run_with_dialog(parser, config, logger):
     )
     try:
         config.netlist_initial_directory = os.path.dirname(parser.file_name)
-        # extra_data_file = parser.latest_extra_data(
-        #         extra_dirs=[config.gcode_dest_dir])
-        # if extra_data_file is not None:
-        #     dlg.set_extra_data_path(extra_data_file)
         config.transfer_to_dialog(dlg.panel)
         if dlg.ShowModal() == wx.ID_OK:
             config.set_from_dialog(dlg.panel)

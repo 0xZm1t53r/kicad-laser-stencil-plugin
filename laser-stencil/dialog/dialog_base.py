@@ -8,9 +8,9 @@ import wx.xrc
 class SettingsDialogBase ( wx.Dialog ):
 
     def __init__( self, parent ):
-        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, 
-          title = u"LaserStencil", pos = wx.DefaultPosition, 
-          size = wx.Size( 463,497 ), 
+        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY,
+          title = u"LaserStencil", pos = wx.DefaultPosition,
+          size = wx.Size( 463,497 ),
           style = wx.DEFAULT_DIALOG_STYLE|wx.STAY_ON_TOP|wx.BORDER_DEFAULT )
 
         self.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
@@ -174,7 +174,7 @@ class GeneralSettingsPanelBase ( wx.Panel ):
            u"Pad Cut Laser Power", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText8m.Wrap( -1 )
         bSizer10m.Add( self.m_staticText8m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
-        self.laserPowerTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(), 
+        self.laserPowerTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
           wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer10m.Add( self.laserPowerTextControl, 1, wx.ALL|wx.EXPAND, 5 )
 
@@ -183,7 +183,7 @@ class GeneralSettingsPanelBase ( wx.Panel ):
            u"Pad Cut Laser Passes", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText9m.Wrap( -1 )
         bSizer20m.Add( self.m_staticText9m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
-        self.laserPassesTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(), 
+        self.laserPassesTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
           wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer20m.Add( self.laserPassesTextControl, 1, wx.ALL|wx.EXPAND, 5 )
 
@@ -192,7 +192,7 @@ class GeneralSettingsPanelBase ( wx.Panel ):
            u"Cuting Speed", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText7m.Wrap( -1 )
         bSizer30m.Add( self.m_staticText7m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
-        self.laserSpeedTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(), 
+        self.laserSpeedTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
           wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer30m.Add( self.laserSpeedTextControl, 1, wx.ALL|wx.EXPAND, 5 )
 
@@ -201,17 +201,62 @@ class GeneralSettingsPanelBase ( wx.Panel ):
            u"Border Mark Laser Power", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText6m.Wrap( -1 )
         bSizer40m.Add( self.m_staticText6m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
-        self.borderPowerTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(), 
+        self.borderPowerTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
           wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer40m.Add( self.borderPowerTextControl, 1, wx.ALL|wx.EXPAND, 5 )
+
+        bSizer50m = wx.BoxSizer( wx.HORIZONTAL )
+        self.m_staticText10m = wx.StaticText( sbSizer6m.GetStaticBox(), wx.ID_ANY,
+           u"Laser X Width", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText10m.Wrap( -1 )
+        bSizer50m.Add( self.m_staticText10m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+        self.laserXWidthTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
+          wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer50m.Add( self.laserXWidthTextControl, 1, wx.ALL|wx.EXPAND, 5 )
+
+        bSizer60m = wx.BoxSizer( wx.HORIZONTAL )
+        self.m_staticText11m = wx.StaticText( sbSizer6m.GetStaticBox(), wx.ID_ANY,
+           u"Laser Y Width ", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText11m.Wrap( -1 )
+        bSizer60m.Add( self.m_staticText11m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+        self.laserYWidthTextControl = wx.TextCtrl( sbSizer6m.GetStaticBox(),
+          wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer60m.Add( self.laserYWidthTextControl, 1, wx.ALL|wx.EXPAND, 5 )
 
         sbSizer6m.Add( bSizer10m, 1, wx.ALL|wx.EXPAND, 5 )
         sbSizer6m.Add( bSizer30m, 1, wx.ALL|wx.EXPAND, 5 )
         sbSizer6m.Add( bSizer20m, 1, wx.ALL|wx.EXPAND, 5 )
         sbSizer6m.Add( bSizer40m, 1, wx.ALL|wx.EXPAND, 5 )
+        sbSizer6m.Add( bSizer50m, 1, wx.ALL|wx.EXPAND, 5 )
+        sbSizer6m.Add( bSizer60m, 1, wx.ALL|wx.EXPAND, 5 )
         bSizer32.Add( sbSizer6m, 0, wx.ALL|wx.EXPAND, 5 )
 
 # -------------------------------------------------------------
+
+        sbSizer7m = wx.StaticBoxSizer( wx.StaticBox( self, wx.ID_ANY, u"Misc Settings" ), wx.VERTICAL )
+
+        bSizer70m = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.includeEdgeCutsCheckbox = wx.CheckBox( sbSizer7m.GetStaticBox(), wx.ID_ANY, u"Include Edge_Cuts layer into F and B stencils", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.includeEdgeCutsCheckbox.SetValue(True)
+        bSizer70m.Add( self.includeEdgeCutsCheckbox, 0, wx.ALL, 5 )
+
+        #bSizer80m = wx.BoxSizer( wx.HORIZONTAL )
+        #self.m_staticText12m = wx.StaticText( sbSizer7m.GetStaticBox(), wx.ID_ANY,
+        #   u"Frame Offset ", wx.DefaultPosition, wx.DefaultSize, 0 )
+        #self.m_staticText12m.Wrap( -1 )
+        #bSizer80m.Add( self.m_staticText12m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+        #self.frameOffsetTextControl = wx.TextCtrl( sbSizer7m.GetStaticBox(),
+        #  wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        #bSizer80m.Add( self.frameOffsetTextControl, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        sbSizer7m.Add( bSizer70m, 1, wx.ALL|wx.EXPAND, 5 )
+        #sbSizer7m.Add( bSizer80m, 1, wx.ALL|wx.EXPAND, 5 )
+        bSizer32.Add( sbSizer7m, 0, wx.ALL|wx.EXPAND, 5 )
+
+# -------------------------------------------------------------
+
 
         self.SetSizer( bSizer32 )
         self.Layout()

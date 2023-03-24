@@ -115,7 +115,7 @@ class Config:
         self.laser_speed         = int( dlg.general.laserSpeedTextControl.Value )
         self.laser_border_intensity = int( dlg.general.borderPowerTextControl.Value )
         self.include_edge_cuts = dlg.general.includeEdgeCutsCheckbox.IsChecked()
-        #self.frame_offset       = float( dlg.general.frameOffsetTextControl.Value )
+        self.frame_offset       = float( dlg.general.frameOffsetTextControl.Value )
 
     def transfer_to_dialog(self, dlg):
         import os.path
@@ -133,4 +133,4 @@ class Config:
         dlg.general.laserSpeedTextControl.Value  = str( self.laser_speed )
         dlg.general.borderPowerTextControl.Value = str( self.laser_border_intensity )
         dlg.general.includeEdgeCutsCheckbox.Value = self.include_edge_cuts
-        #dlg.general.frameOffsetTextControl.Value  = str( self.frame_offset )
+        dlg.general.frameOffsetTextControl.Value  = str( self.frame_offset )

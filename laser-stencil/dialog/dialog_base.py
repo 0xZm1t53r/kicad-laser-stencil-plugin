@@ -241,18 +241,18 @@ class GeneralSettingsPanelBase ( wx.Panel ):
         self.includeEdgeCutsCheckbox.SetValue(True)
         bSizer70m.Add( self.includeEdgeCutsCheckbox, 0, wx.ALL, 5 )
 
-        #bSizer80m = wx.BoxSizer( wx.HORIZONTAL )
-        #self.m_staticText12m = wx.StaticText( sbSizer7m.GetStaticBox(), wx.ID_ANY,
-        #   u"Frame Offset ", wx.DefaultPosition, wx.DefaultSize, 0 )
-        #self.m_staticText12m.Wrap( -1 )
-        #bSizer80m.Add( self.m_staticText12m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
-        #self.frameOffsetTextControl = wx.TextCtrl( sbSizer7m.GetStaticBox(),
-        #  wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
-        #bSizer80m.Add( self.frameOffsetTextControl, 1, wx.ALL|wx.EXPAND, 5 )
+        bSizer80m = wx.BoxSizer( wx.HORIZONTAL )
+        self.m_staticText12m = wx.StaticText( sbSizer7m.GetStaticBox(), wx.ID_ANY,
+           u"Frame Offset ", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText12m.Wrap( -1 )
+        bSizer80m.Add( self.m_staticText12m, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+        self.frameOffsetTextControl = wx.TextCtrl( sbSizer7m.GetStaticBox(),
+          wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer80m.Add( self.frameOffsetTextControl, 1, wx.ALL|wx.EXPAND, 5 )
 
 
         sbSizer7m.Add( bSizer70m, 1, wx.ALL|wx.EXPAND, 5 )
-        #sbSizer7m.Add( bSizer80m, 1, wx.ALL|wx.EXPAND, 5 )
+        sbSizer7m.Add( bSizer80m, 1, wx.ALL|wx.EXPAND, 5 )
         bSizer32.Add( sbSizer7m, 0, wx.ALL|wx.EXPAND, 5 )
 
 # -------------------------------------------------------------

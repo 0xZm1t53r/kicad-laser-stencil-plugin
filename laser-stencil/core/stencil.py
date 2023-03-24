@@ -152,19 +152,6 @@ def generate_stencil(pcb_footprints, config):
 
 # -----------------------------------------------------------------------------
 
-def open_file(filename):
-    import subprocess
-    try:
-        if sys.platform.startswith('win'):
-            os.startfile(filename)
-        elif sys.platform.startswith('darwin'):
-            subprocess.call(('open', filename))
-        elif sys.platform.startswith('linux'):
-            subprocess.call(('xdg-open', filename))
-    except OSError as oe:
-        log.warn('Failed to open browser: {}'.format(oe.message))
-
-
 def process_substitutions( gcode_name_format, pcb_file_name, metadata, pcb_side ):
     # type: (str, str, dict)->str
     name = gcode_name_format.replace('%f', os.path.splitext(pcb_file_name)[0])
@@ -215,43 +202,118 @@ def searchNearestNextEdge( sortEdges, px, py ):
 
 
 def arc_edges(center_x, center_y, radius, start_angle, end_angle):
-    edges = []
+  edges = []
 
-    delta_angle = 1
-    start_x = center_x + radius * math.cos(math.radians(start_angle))
-    start_y = center_y + radius * math.sin(math.radians(start_angle))
-    end_x = center_x + radius * math.cos(math.radians(end_angle))
-    end_y = center_y + radius * math.sin(math.radians(end_angle))
+  delta_angle = 1
+  start_x = center_x + radius * math.cos(math.radians(start_angle))
+  start_y = center_y + radius * math.sin(math.radians(start_angle))
+  end_x = center_x + radius * math.cos(math.radians(end_angle))
+  end_y = center_y + radius * math.sin(math.radians(end_angle))
 
-    while (start_angle + delta_angle) < end_angle:
-        mid_x = center_x + radius * math.cos(math.radians(start_angle + delta_angle))
-        mid_y = center_y + radius * math.sin(math.radians(start_angle + delta_angle))
+  while (start_angle + delta_angle) < end_angle:
+    mid_x = center_x + radius * math.cos(math.radians(start_angle + delta_angle))
+    mid_y = center_y + radius * math.sin(math.radians(start_angle + delta_angle))
 
-        edges.append({ "startx": start_x, "starty": start_y, "endx": mid_x, "endy": mid_y})
+    edges.append({ "startx": start_x,
+                   "starty": start_y,
+                   "endx": mid_x,
+                   "endy": mid_y
+                 })
 
-        start_x = mid_x
-        start_y = mid_y
-        start_angle += delta_angle
+    start_x = mid_x
+    start_y = mid_y
+    start_angle += delta_angle
 
-    if start_angle != end_angle:
-        edges.append({ "startx": start_x, "starty": start_y, "endx": end_x, "endy": end_y})
+  if start_angle != end_angle:
+    edges.append({ "startx": start_x,
+                   "starty": start_y,
+                   "endx": end_x,
+                   "endy": end_y
+                 })
 
-    return edges
+  return edges
 
 
-def gcode_border(pcbdata, config, pcb_side, simulation):
+def scale_polygon(sortEdges, offset):
+  polygon = []
+
+  for edge in sortEdges:
+    polygon.append({'x': edge['startx'], 'y': edge['starty']})
+    polygon.append({'x': edge['endx'], 'y': edge['endy']})
+
+  center = centroid_for_polygon(polygon)
+  for edge in sortEdges:
+    if edge['startx'] > center['x']:
+      edge['startx'] += offset
+    else:
+      edge['startx'] -= offset
+
+    if edge['starty'] > center['y']:
+      edge['starty'] += offset
+    else:
+      edge['starty'] -= offset
+
+    if edge['endx'] > center['x']:
+      edge['endx'] += offset
+    else:
+      edge['endx'] -= offset
+
+    if edge['endy'] > center['y']:
+      edge['endy'] += offset
+    else:
+      edge['endy'] -= offset
+
+  return sortEdges
+
+def area_for_polygon(polygon):
+  """
+  https://stackoverflow.com/a/14115494
+  """
+  result = 0
+  imax = len(polygon) - 1
+
+  for i in range(0,imax):
+    result += (polygon[i]['x'] * polygon[i+1]['y']) - (polygon[i+1]['x'] * polygon[i]['y'])
+
+  result += (polygon[imax]['x'] * polygon[0]['y']) - (polygon[0]['x'] * polygon[imax]['y'])
+  return result / 2.
+
+def centroid_for_polygon(polygon):
+  """
+  https://stackoverflow.com/a/14115494
+  """
+  area = area_for_polygon(polygon)
+  imax = len(polygon) - 1
+
+  result_x = 0
+  result_y = 0
+
+  for i in range(0,imax):
+    result_x += (polygon[i]['x'] + polygon[i+1]['x']) * ((polygon[i]['x'] * polygon[i+1]['y']) - (polygon[i+1]['x'] * polygon[i]['y']))
+    result_y += (polygon[i]['y'] + polygon[i+1]['y']) * ((polygon[i]['x'] * polygon[i+1]['y']) - (polygon[i+1]['x'] * polygon[i]['y']))
+
+  result_x += (polygon[imax]['x'] + polygon[0]['x']) * ((polygon[imax]['x'] * polygon[0]['y']) - (polygon[0]['x'] * polygon[imax]['y']))
+  result_y += (polygon[imax]['y'] + polygon[0]['y']) * ((polygon[imax]['x'] * polygon[0]['y']) - (polygon[0]['x'] * polygon[imax]['y']))
+  result_x /= (area * 6.0)
+  result_y /= (area * 6.0)
+
+  return {'x': result_x, 'y': result_y}
+
+def gcode_border(pcbdata, config, pcb_side, offset, simulation):
   gcode = ''
   intensity = " S" + str( config.laser_border_intensity * 10 )  # GRBL expects intensity in tenths perсents
   speed     = " F" + str( config.laser_border_speed )
+
   if simulation:
-      move_command = 'G00'
+    move_command = 'G00'
   else:
-      move_command = 'G01'
+    move_command = 'G01'
 
   minx = pcbdata["edges_bbox"]["minx"]
   miny = pcbdata["edges_bbox"]["miny"]
   maxx = pcbdata["edges_bbox"]["maxx"]
   maxy = pcbdata["edges_bbox"]["maxy"]
+
   def cX( x ):
     if pcb_side is "F":
       return str( round_floats( x - minx, 3 ) )
@@ -268,14 +330,26 @@ def gcode_border(pcbdata, config, pcb_side, simulation):
   sortEdges = []
   for edge in pcbdata["edges"]:
     if  edge["type"] == "segment":
-      newEdge = { "startx": edge["start"][0], "starty": edge["start"][1],
-                  "endx": edge["end"][0], "endy": edge["end"][1] }
-      sortEdges.append( newEdge )
+      sortEdges.append({ "startx": edge["start"][0],
+                         "starty": edge["start"][1],
+                         "endx":   edge["end"][0],
+                         "endy":   edge["end"][1]
+                       })
     elif edge["type"] == "arc":
-        sortEdges.extend(arc_edges(edge["start"][0], edge["start"][1], edge["radius"],
-                          edge["startangle"], edge["endangle"]))
+      sortEdges.extend(arc_edges(edge["start"][0],
+                                 edge["start"][1],
+                                 edge["radius"],
+                                 edge["startangle"],
+                                 edge["endangle"]))
     elif  edge["type"] == "circle":
-        sortEdges.extend(arc_edges(edge["start"][0], edge["start"][1], edge["radius"], 0, 360))
+      sortEdges.extend(arc_edges(edge["start"][0],
+                                 edge["start"][1],
+                                 edge["radius"],
+                                 0,
+                                 360))
+
+  if offset != 0:
+    sortEdges = scale_polygon(sortEdges, offset)
 
   nextEdge = 0
   reverse = False
@@ -285,24 +359,30 @@ def gcode_border(pcbdata, config, pcb_side, simulation):
     nextEdge, reverse, d = searchNearestNextEdge( sortEdges, px, py )
     edge = sortEdges.pop( nextEdge )
     gcode += '( n='+str(nextEdge)+ ' d='+str(d)+' )\n'
-    if reverse :
-      gcode += 'G00 X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   + '\n'
-      if not simulation:
-          gcode += 'M03'+ intensity +'\n'
-      gcode += move_command + ' X'+cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + speed +'\n'
-      if not simulation:
-          gcode += 'M05 S0\n\n'
-      px = edge["startx"]
-      py = edge["starty"]
+
+    if reverse:
+      start_x = edge['endx']
+      start_y = edge['endy']
+      end_x = edge['startx']
+      end_y = edge['starty']
     else:
-      gcode += 'G00 X'+ cX(edge["startx"]) + ' Y'+cY(edge["starty"]) + '\n'
-      if not simulation:
-          gcode += 'M03'+ intensity +'\n'
-      gcode += move_command + ' X'+cX(edge["endx"])   + ' Y'+cY(edge["endy"])   + speed +'\n'
-      if not simulation:
-          gcode += 'M05 S0\n\n'
-      px = edge["endx"]
-      py = edge["endy"]
+      start_x = edge['startx']
+      start_y = edge['starty']
+      end_x = edge['endx']
+      end_y = edge['endy']
+
+    gcode += 'G00 X' + cX(start_x)   + ' Y' + cY(start_y)  + '\n'
+    if not simulation:
+      # laser ON
+      gcode += 'M03'+ intensity +'\n'
+    gcode += move_command + ' X'+ cX(end_x) + ' Y' + cY(end_y) + speed +'\n'
+    if not simulation:
+      # laser OFF
+      gcode += 'M05 S0\n\n'
+
+    px = end_x
+    py = end_y
+
 
   return gcode
 
@@ -373,9 +453,12 @@ def gcode_pads( pcbdata, config, pcb_side ):
           if pad["type"] is "smd":
             if pad["shape"] in ["roundrect", "rect", "oval"] :
               newPad = { 'ref': footprint["ref"],
-                'px': pad["pos"][0], 'py': pad["pos"][1],
-                'sx': pad["size"][0] / 2, 'sy': pad["size"][1] / 2,
-                'angle': math.radians( pad["angle"] ) }
+                         'px': pad["pos"][0],
+                         'py': pad["pos"][1],
+                         'sx': pad["size"][0] / 2,
+                         'sy': pad["size"][1] / 2,
+                         'angle': math.radians(pad["angle"])
+                       }
               x =  pad["pos"][0]
               y =  pad["pos"][1]
               fpPads.append( newPad )
@@ -442,7 +525,7 @@ def generate_file(pcb_file_dir, pcb_file_name, pcbdata, config, pcb_side):
 
     gcode = get_file_content("stencil.gcode")
     if config.include_edge_cuts:
-        gcode = gcode.replace('(**BORDER**)', gcode_border( pcbdata, config, pcb_side, False ) )
+        gcode = gcode.replace('(**BORDER**)', gcode_border( pcbdata, config, pcb_side, 0, False ) )
     else:
         gcode = gcode.replace('(**BORDER**)', '' )
     gcode = gcode.replace('(**PADS**)',   gcode_pads( pcbdata, config, pcb_side ) )
@@ -482,7 +565,7 @@ def generate_edge_file(pcb_file_dir, pcb_file_name, pcbdata, config, test):
 
     gcode = get_file_content("stencil.gcode")
     gcode = gcode.replace('(**PADS**)', '' )
-    gcode = gcode.replace('(**BORDER**)', gcode_border(pcbdata, config, 'F', test) )
+    gcode = gcode.replace('(**BORDER**)', gcode_border(pcbdata, config, 'F', config.frame_offset, test) )
 
     with io.open(gcode_file_name, 'wt', encoding='utf-8') as gcode_file:
         gcode_file.write(gcode)
